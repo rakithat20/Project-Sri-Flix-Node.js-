@@ -1,8 +1,8 @@
 import pg from 'pg';
-import aws from 'aws-sdk';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import multer from 'multer';
+import * as Minio from 'minio'
 
 dotenv.config();
 const upload = multer({ dest: 'uploads/' });
@@ -17,14 +17,15 @@ const db = new Client({
     port: process.env.DO_DOCKER_PORT,
 });
 
-const awsS3Client = new aws.S3({
-    endpoint: process.env.DO_SPACES_ENDPOINT,
-    region: 'nyc3',
-    credentials: {
-        accessKeyId: process.env.DO_SPACES_ACCESS_ID,
-        secretAccessKey: process.env.DO_SPACES_SECRET_ACCESS_KEY
-    }
-});
+
+const minioClient = new Minio.Client({
+    endPoint: process.env.DO_SPACES_ENDPOINT,
+    useSSL: true,
+    accessKey: process.env.DO_SPACES_ACCESS_ID,
+    secretKey: process.env.DO_SPACES_SECRET_ACCESS_KEY,
+  });
+
+
 
 db.connect();
 class movieModel{
@@ -53,13 +54,22 @@ class movieModel{
         return result.rows
     }
     static async uploadMovie(file , movie){
-        const s3Response = await awsS3Client.upload({
-            Bucket: process.env.DO_SPACES_BUCKET,
-            Key: movie.imdbID+'.mp4',
-            Body: fs.createReadStream(file.path),
-            ContentType: 'video/mp4',
-            ACL:'public-read'
-        }).promise();
+        console.log(movie.imdbID);
+        const fileStream = fs.createReadStream(file.path);
+        const fileStat = fs.statSync(file.path);
+    
+    try {
+        const minioResponse = await new Promise((resolve, reject) => {
+            minioClient.putObject('movies', movie.imdbID + '.mp4', fileStream, fileStat.size, (err, objInfo) => {
+                if (err) {
+                    return reject(err);
+                }
+                resolve(objInfo);
+            });
+        });
+        console.log('Success', minioResponse);
+
+        // Uncomment and adjust this section if you need to insert the movie data into your database
         const query = `
             INSERT INTO movie ("title", "year", "rated", "released", "runtime", "genre", "actors", "plot", "country", "poster", "imdbrating", "imdbid", "cdnpath", "backdrop")
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
@@ -77,12 +87,33 @@ class movieModel{
             movie.Poster,
             movie.imdbRating,
             movie.imdbID,
-            s3Response.Location,
+            `https://console.tharupathir.live/browser/movies/${movie.imdbID}`,
             movie.Backdrop
         ];
         const result = await db.query(query, values);
         console.log(result)
-        return status(200).json({ message: 'File uploaded successfully', data: s3Response });
+
+        return { message: 'File uploaded successfully', data: minioResponse };
+    } catch (err) {
+        console.error('Error uploading file to MinIO:', err);
+        throw err;
+    }
+    }
+    static async getPresignedUrl(movieId) {
+        try {
+            const url = await new Promise((resolve, reject) => {
+                minioClient.presignedUrl('GET', 'movies', movieId + '.mp4', 24 * 60 * 60, (err, presignedUrl) => { // URL valid for 24 hours
+                    if (err) {
+                        return reject(err);
+                    }
+                    resolve(presignedUrl);
+                });
+            });
+            return url;
+        } catch (err) {
+            console.error('Error generating presigned URL:', err);
+            throw err;
+        }
     }
     static async deleteById(imdbID){
         console.log(imdbID)

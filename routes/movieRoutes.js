@@ -1,3 +1,4 @@
+
 import express from 'express'
 import multer from 'multer'
 import movieModel from '../models/movieModel.js'
@@ -44,9 +45,20 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     }
 
     try {
-        const result = await movieModel.uploadMovie(file,movie);
+        const result = await movieModel.uploadMovie(file, movie);
+        return res.status(200).json(result);
     } catch (err) {
         console.error('Error uploading file to S3:', err);
+        return res.status(500).json({ message: 'Internal server error' });
+    }
+});
+router.get('/presigned-url/:id', async (req, res) => {
+    const movieId = req.params.id;
+    try {
+        const url = await movieModel.getPresignedUrl(movieId);
+        return res.status(200).json({ url });
+    } catch (err) {
+        console.error('Error getting presigned URL:', err);
         return res.status(500).json({ message: 'Internal server error' });
     }
 });
