@@ -9,7 +9,8 @@ import userRouter from './routes/userRoutes.js';
 import session from 'express-session';
 import passport from 'passport';
 import dotenv from 'dotenv';
-
+import './strategies/local-strategy.mjs';
+import connectPgSimple from 'connect-pg-simple';
 
 
 dotenv.config();
@@ -21,19 +22,21 @@ app.use(cors());
 app.use(session({
     secret : process.env.SESSION_SECRET,
     resave : false,
-    saveUninitialized :  true,
+    saveUninitialized :  false,
     cookie:{
-      maxAge : 1000 * 60 *60*24
-    }
+      maxAge : 60000 * 60 
+    },
+    store: new (connectPgSimple(session))({
+      conString:`postgres://${process.env.DB_USER}:${process.env.DO_PG_PW}@${process.env.DO_HOST}:${process.env.DO_DOCKER_PORT}/${process.env.DO_DB}`
+    }),
   }))
-
 
 app.use(passport.initialize())
 app.use(passport.session())
 const upload = multer({ dest: 'uploads/' });
 
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(morgan('short'))
+app.use(morgan('combined'))
 app.use('/movies',movieRouter)
 app.use('/users',userRouter)
 

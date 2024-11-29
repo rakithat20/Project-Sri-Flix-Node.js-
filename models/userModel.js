@@ -22,6 +22,11 @@ class userModel{
         const result =  await db.query("SELECT * FROM users")
         return result.rows;
     }
+    static async getFromEmail(email){
+        const result = await db.query("SELECT * FROM users WHERE email = $1",[email])
+       return(result.rows[0])
+    }
+
     static async checkExist(email){
         const result = await db.query("SELECT * FROM users WHERE email = $1",[email])
         if(result.rows.length===0){
@@ -59,14 +64,15 @@ class userModel{
                 const hash = await this.getUserHash(email);
                 const match = await bcrypt.compare(password, hash.hash);
                 if (match) {
-                    console.log(password);
                     return true;
                 } else {
                     console.log('Password incorrect');
+                    throw new Error("Incorrect PW")
                     return false;
                 }
             } else {
                 console.log('User does not exist');
+                throw new Error("User Does not exist")
                 return false;
             }
         } catch (error) {
@@ -75,7 +81,7 @@ class userModel{
         }
     }
     static async isLogged(req){
-        return req.isAuthenticated();
+        return req.session.authenticated==='true'
         
     }
     static async count(){
@@ -85,13 +91,24 @@ class userModel{
 
 
     
- static async getUserData(access_token) {
-
-    const response = await fetch(`https://www.googleapis.com/oauth2/v3/userinfo?access_token=${access_token}`);
-    
-    //console.log('response',response);
-    const data = await response.json();
-    console.log('data',data);
+ static async getUserData(email, password) {
+    try {
+        const userExists = await this.checkExist(email); // Await here
+        if (userExists) {
+            const userHash = await this.getUserHash(email); // Await here
+            const match = await bcrypt.compare(password, userHash.hash); // Await here
+            if (match) {
+                return { email, password }; // User object
+            } else {
+                throw new Error('Password does not match');
+            }
+        } else {
+            throw new Error('User not found');
+        }
+    } catch (err) {
+        console.error('Error in getUserData:', err.message);
+        throw err;
+    }
   }
 }
 

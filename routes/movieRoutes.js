@@ -21,6 +21,7 @@ router.get('/:id',async(req,res)=>{
 })
 
 router.get('/',async(req,res)=>{
+    
     const result = await movieModel.getAll();
     res.send(result)
 })
