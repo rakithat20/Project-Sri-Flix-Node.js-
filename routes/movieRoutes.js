@@ -1,75 +1,140 @@
-
-import express from 'express'
-import multer from 'multer'
-import movieModel from '../models/movieModel.js'
+import express from 'express';
+import multer from 'multer';
+import movieModel from '../models/movieModel.js';
+import logger from '../logger.js';
 
 const router = express.Router();
-const upload = multer({dest:'uploads/'});
+const upload = multer({ dest: 'uploads/' });
 
-router.get('/count',async(req,res)=>{
-    let count = await movieModel.getCount();
+// Route to get the total count of movies
+router.get('/count', async (req, res) => {
+  try {
+    const count = await movieModel.getCount();
+    logger.info('GET /count - Movie count retrieved successfully');
     res.send(count);
-})
-router.get('/toprated',async(req,res)=>{
-    let result = await movieModel.getTopRated();
-    res.send(result)
-})
-router.get('/:id',async(req,res)=>{
-    let imdbId = req.params.id;
-    let result = await movieModel.getById(imdbId);
-    res.send(result)
-})
+  } catch (err) {
+    logger.error(`GET /count - Error: ${err}`);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
 
-router.get('/',async(req,res)=>{
-    
-    const result = await movieModel.getAll();
-    res.send(result)
-})
-router.get('/title/:name',async(req,res)=>{
-    let name = req.params.name;
-    const result = await movieModel.getByTitle(name);
-    res.send(result);
-})
+// Route to get top-rated movies
+router.get('/top-rated', async (req, res) => {
+  try {
+    const topRated = await movieModel.getTopRated();
+    logger.info('GET /top-rated - Top-rated movies retrieved successfully');
+    res.json(topRated);
+  } catch (err) {
+    logger.error(`GET /top-rated - Error: ${err}`);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
 
-router.get('/genre/:genre',async(req,res)=>{
-    const genre = req.params.genre;
-    const result = await movieModel.getByGenre(genre)
-    res.send(result)
-})
+// Route to get a movie by its ID
+router.get('/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const movie = await movieModel.getById(id);
+    if (!movie) {
+      logger.warn(`GET /${id} - Movie not found`);
+      return res.status(404).json({ message: 'Movie not found' });
+    }
+    logger.info(`GET /${id} - Movie retrieved successfully`);
+    res.json(movie);
+  } catch (err) {
+    logger.error(`GET /${id} - Error: ${err}`);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
 
+// Route to get all movies
+router.get('/', async (req, res) => {
+  try {
+    const movies = await movieModel.getAll();
+    logger.info('GET / - All movies retrieved successfully');
+    res.json(movies);
+  } catch (err) {
+    logger.error(`GET / - Error: ${err}`);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Route to search movies by title
+router.get('/title/:name', async (req, res) => {
+  const { name } = req.params;
+  try {
+    const movies = await movieModel.getByTitle(name);
+    logger.info(`GET /title/${name} - Movies retrieved successfully`);
+    res.json(movies);
+  } catch (err) {
+    logger.error(`GET /title/${name} - Error: ${err}`);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Route to search movies by genre
+router.get('/genre/:genre', async (req, res) => {
+  const { genre } = req.params;
+  try {
+    const movies = await movieModel.getByGenre(genre);
+    logger.info(`GET /genre/${genre} - Movies retrieved successfully`);
+    res.json(movies);
+  } catch (err) {
+    logger.error(`GET /genre/${genre} - Error: ${err}`);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Route to upload a movie
 router.post('/upload', upload.single('file'), async (req, res) => {
-    const file = req.file;
-    const movie = JSON.parse(req.body.data);
-    console.log(movie);
-    if (!file) {
-        return res.status(400).json({ message: 'No file uploaded' });
-    }
+  const file = req.file;
+  const movie = req.body;
 
-    try {
-        const result = await movieModel.uploadMovie(file, movie);
-        return res.status(200).json(result);
-    } catch (err) {
-        console.error('Error uploading file to S3:', err);
-        return res.status(500).json({ message: 'Internal server error' });
-    }
+  if (!file || !movie) {
+    logger.warn('POST /upload - File or movie data missing');
+    return res.status(400).json({ message: 'File or movie data missing' });
+  }
+
+  try {
+    const response = await movieModel.uploadMovie(file, movie);
+    logger.info(`POST /upload - Movie ${movie.imdbID} uploaded successfully`);
+    res.json(response);
+  } catch (err) {
+    logger.error(`POST /upload - Error: ${err}`);
+    res.status(500).json({ message: 'Internal server error' });
+  }
 });
+
+// Route to generate a presigned URL for movie download
 router.get('/presigned-url/:id', async (req, res) => {
-    const movieId = req.params.id;
-    try {
-        const url = await movieModel.getPresignedUrl(movieId);
-        return res.status(200).json({ url });
-    } catch (err) {
-        console.error('Error getting presigned URL:', err);
-        return res.status(500).json({ message: 'Internal server error' });
-    }
+  const { id } = req.params;
+
+  try {
+    const url = await movieModel.getPresignedUrl(id);
+    logger.info(`GET /presigned-url/${id} - Presigned URL generated successfully`);
+    res.json({ presignedUrl: url });
+  } catch (err) {
+    logger.error(`GET /presigned-url/${id} - Error: ${err}`);
+    res.status(500).json({ message: 'Internal server error' });
+  }
 });
-router.delete('/delete/:id',async(req,res)=>{
-    const id =req.params.id;
-    console.log(id)
-    const result =  await movieModel.deleteById(id);
-    res.send('succesfully deleted');
-})
 
+// Route to delete a movie by ID
+router.delete('/:id', async (req, res) => {
+  const { id } = req.params;
 
+  try {
+    const result = await movieModel.deleteById(id);
+    if (result.rowCount === 0) {
+      logger.warn(`DELETE /${id} - Movie not found`);
+      return res.status(404).json({ message: 'Movie not found' });
+    }
+    logger.info(`DELETE /${id} - Movie deleted successfully`);
+    res.json({ message: 'Movie deleted successfully' });
+  } catch (err) {
+    logger.error(`DELETE /${id} - Error: ${err}`);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
 
 export default router;

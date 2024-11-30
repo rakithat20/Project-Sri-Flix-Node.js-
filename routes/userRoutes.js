@@ -1,13 +1,10 @@
 import express from 'express'
 import userModel from '../models/userModel.js'
-import session, { Session } from 'express-session';
 import passport from 'passport';
-import localStrategy from '../strategies/local-strategy.mjs';
 const router = express.Router();
+import logger from '../logger.js';
 
 router.get('/',async (req,res)=>{
-    console.log("Session data at /:", req.session);
-
     if (req.user) {
         const result = await userModel.getAll();
         res.send(result);
@@ -28,6 +25,7 @@ router.post('/user',async (req,res)=>{
 })
 router.post('/user/login',passport.authenticate('local'),async(req,res)=>{
     if(req.user){
+        logger.info(`User logged in: ${req.user.email}`);
         res.send(true)
     }
     else{
@@ -37,6 +35,7 @@ router.post('/user/login',passport.authenticate('local'),async(req,res)=>{
 router.post('/user/logout',(req,res)=>{
     if(!req.user)res.sendStatus(401);
     else{
+        logger.info(`User logged out: ${req.user.email}`);
         req.logOut((err=>{
             if(err)res.sendStatus(400);
             res.sendStatus(200)
@@ -52,8 +51,13 @@ router.get('/checkLogin',async(req,res)=>{
 })
 router.get('/count',async(req,res)=>{
     const result = await userModel.count();
-    console.log(result)
     res.status(200).send({result})
+})
+
+router.post('/getemail',async(req,res)=>{
+    const result = await userModel.getFromEmail(req.body.email)
+    console.log(result);
+    res.sendStatus(201)
 })
 
 export default router
