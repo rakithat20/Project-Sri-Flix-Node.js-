@@ -25,6 +25,7 @@ router.post('/user',async (req,res)=>{
 })
 router.post('/user/login',passport.authenticate('local'),async(req,res)=>{
     if(req.user){
+        
         logger.info(`User logged in: ${req.user.email}`);
         res.send(true)
     }
@@ -35,6 +36,7 @@ router.post('/user/login',passport.authenticate('local'),async(req,res)=>{
 router.post('/user/logout',(req,res)=>{
     if(!req.user)res.sendStatus(401);
     else{
+        console.log(req.user)
         logger.info(`User logged out: ${req.user.email}`);
         req.logOut((err=>{
             if(err)res.sendStatus(400);
@@ -43,11 +45,16 @@ router.post('/user/logout',(req,res)=>{
     }
 })
 router.get('/checkLogin',async(req,res)=>{
-    console.log(req.sessionID)
-    console.log(req.sessionStore.get(req.sessionID,(err,session)=>{
-        console.log(session)
-    }))
-    res.send(200);
+    
+    req.user?res.send(200):res.sendStatus(403)
+})
+router.get('/checkAdmin' ,(req,res)=>{
+    if(req.user){
+        req.user.role==='admin'?res.send({'role':'admin'}):res.send(401)
+    }
+    else{
+        res.sendStatus(403)
+    }
 })
 router.get('/count',async(req,res)=>{
     const result = await userModel.count();
