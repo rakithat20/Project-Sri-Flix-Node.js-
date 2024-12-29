@@ -30,7 +30,11 @@ app.use((err, req, res, next) => {
   logger.error(`Error: ${err.message} at ${req.method} ${req.url} from ${req.ip}`);
   res.status(500).send('Internal Server Error');
 });
-
+app.use(cors({
+  origin: 'https://sriflix.tharupathir.live', // Your frontend domain
+  methods: ['GET', 'POST', 'PUT', 'DELETE'], // Allowed HTTP methods
+  credentials: true, // If using cookies
+}));
 app.use(
   cors({
     origin: 'http://localhost:3001',
