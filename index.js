@@ -25,11 +25,10 @@ app.use((req, res, next) => {
 
 // CORS Middleware
 app.use(cors({
-  origin: ['https://sriflix.tharupathir.live', 'http://localhost:3001'], // Allow multiple origins
-  methods: ['GET', 'POST', 'PUT', 'DELETE'], // Allowed HTTP methods
-  credentials: true, // Allow cookies
+  origin: 'https://sriflixcom.vercel.app',  // Allow only your frontend domain
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true,  // Allow cookies and authentication headers
 }));
-
 // Trust proxy for cookies and sessions in production
 app.set('trust proxy', 1);
 
