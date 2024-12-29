@@ -1,7 +1,8 @@
+import pkg from 'aws-sdk';
+const { S3 } = pkg;
 import pg from 'pg';
 import dotenv from 'dotenv';
 import fs from 'fs';
-import * as Minio from 'minio';
 import logger from '../logger.js';
 
 dotenv.config();
@@ -15,11 +16,14 @@ const db = new Client({
   port: process.env.DO_DOCKER_PORT,
 });
 
-const minioClient = new Minio.Client({
-  endPoint: process.env.DO_SPACES_ENDPOINT,
-  useSSL: true,
-  accessKey: process.env.DO_SPACES_ACCESS_ID,
-  secretKey: process.env.DO_SPACES_SECRET_ACCESS_KEY,
+const s3Client = new S3({
+  forcePathStyle: false, // Configures to use subdomain/virtual calling format.
+  endpoint: process.env.DO_SPACES_ENDPOINT,
+  region: process.env.DO_REGION,
+  credentials: {
+    accessKeyId: process.env.DO_SPACES_ACCESS_ID,
+    secretAccessKey: process.env.DO_SPACES_SECRET_ACCESS_KEY,
+  },
 });
 
 db.connect();
@@ -90,23 +94,30 @@ class movieModel {
       throw err;
     }
   }
-
   static async uploadMovie(file, movie) {
     const fileStream = fs.createReadStream(file.path);
-    const fileStat = fs.statSync(file.path);
-
+  
     try {
-      const minioResponse = await new Promise((resolve, reject) => {
-        minioClient.putObject('movies', movie.imdbID + '.mp4', fileStream, fileStat.size, (err, objInfo) => {
-          if (err) {
-            logger.error(`Error uploading file to MinIO: ${err}`);
-            return reject(err);
-          }
-          resolve(objInfo);
-        });
-      });
-      logger.info(`File uploaded to MinIO successfully: ${movie.imdbID}`);
-
+      // Check if the movie already exists in the database
+      const existingMovie = await db.query('SELECT * FROM Movie WHERE imdbID = $1', [movie.imdbID]);
+      if (existingMovie.rows.length > 0) {
+        logger.error(`Duplicate movie ID found: ${movie.imdbID}`);
+        throw new Error(`Movie with ID ${movie.imdbID} already exists`);
+      }
+  
+      // Upload to S3
+      const s3Response = await s3Client
+        .upload({
+          Bucket: process.env.DO_SPACES_BUCKET,
+          Key: `${movie.imdbID}.mp4`,
+          Body: fileStream,
+          ContentType: 'video/mp4',
+          ACL:'public-read'
+        })
+        .promise();
+      logger.info(`File uploaded to S3 successfully: ${movie.imdbID}`);
+  
+      // Insert into the database
       const query = `
         INSERT INTO movie ("title", "year", "rated", "released", "runtime", "genre", "actors", "plot", "country", "poster", "imdbrating", "imdbid", "cdnpath", "backdrop")
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
@@ -124,30 +135,28 @@ class movieModel {
         movie.Poster,
         movie.imdbRating,
         movie.imdbID,
-        `https://console.tharupathir.live/browser/movies/${movie.imdbID}`,
+        `https://moviesb.sgp1.cdn.digitaloceanspaces.com/${movie.imdbID}.mp4`,
         movie.Backdrop,
       ];
-      const result = await db.query(query, values);
+      await db.query(query, values);
+  
       logger.info(`Movie data inserted into database: ${movie.imdbID}`);
-
-      return { message: 'File uploaded successfully', data: minioResponse };
+      return { message: 'File uploaded successfully', data: s3Response };
     } catch (err) {
-      logger.error(`Error uploading movie to MinIO: ${err}`);
+      logger.error(`Error uploading movie to S3: ${err}`);
       throw err;
     }
   }
+  
 
   static async getPresignedUrl(movieId) {
     try {
-      const url = await new Promise((resolve, reject) => {
-        minioClient.presignedUrl('GET', 'movies', movieId + '.mp4', 24 * 60 * 60, (err, presignedUrl) => {
-          if (err) {
-            logger.error(`Error generating presigned URL for movieId ${movieId}: ${err}`);
-            return reject(err);
-          }
-          resolve(presignedUrl);
-        });
+      const url = s3Client.getSignedUrl('getObject', {
+        Bucket: process.env.DO_SPACES_BUCKET,
+        Key: `${movieId}.mp4`,
+        Expires: 24 * 60 * 60, // 24 hours
       });
+
       logger.info(`Presigned URL generated for movieId: ${movieId}`);
       return url;
     } catch (err) {
@@ -158,6 +167,13 @@ class movieModel {
 
   static async deleteById(imdbID) {
     try {
+      await s3Client
+        .deleteObject({
+          Bucket: process.env.DO_SPACES_BUCKET,
+          Key: `${imdbID}.mp4`,
+        })
+        .promise();
+
       const result = await db.query('DELETE FROM Movie WHERE imdbid = $1', [imdbID]);
       logger.info(`Deleted movie with ID: ${imdbID}`);
       return result;

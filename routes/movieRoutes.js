@@ -88,7 +88,8 @@ router.get('/genre/:genre', async (req, res) => {
 // Route to upload a movie
 router.post('/upload', upload.single('file'), async (req, res) => {
   const file = req.file;
-  const movie = req.body;
+  let movie = req.body;
+   movie = JSON.parse(movie.data);
 
   if (!file || !movie) {
     logger.warn('POST /upload - File or movie data missing');
@@ -120,7 +121,7 @@ router.get('/presigned-url/:id', async (req, res) => {
 });
 
 // Route to delete a movie by ID
-router.delete('/:id', async (req, res) => {
+router.delete('/delete/:id', async (req, res) => {
   const { id } = req.params;
 
   try {
