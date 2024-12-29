@@ -116,7 +116,14 @@ class movieModel {
         })
         .promise();
       logger.info(`File uploaded to S3 successfully: ${movie.imdbID}`);
-  
+      
+      fs.unlink(file.path, (err) => {
+        if (err) {
+          logger.error(`Error deleting local file ${file.path}: ${err}`);
+        } else {
+          logger.info(`Local file deleted successfully: ${file.path}`);
+        }
+      });
       // Insert into the database
       const query = `
         INSERT INTO movie ("title", "year", "rated", "released", "runtime", "genre", "actors", "plot", "country", "poster", "imdbrating", "imdbid", "cdnpath", "backdrop")
