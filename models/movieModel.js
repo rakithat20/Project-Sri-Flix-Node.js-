@@ -151,16 +151,17 @@ class movieModel {
 
   static async getPresignedUrl(movieId) {
     try {
-      const url = s3Client.getSignedUrl('getObject', {
-        Bucket: process.env.DO_SPACES_BUCKET,
-        Key: `${movieId}.mp4`,
-        Expires: 24 * 60 * 60, // 24 hours
-      });
-
-      logger.info(`Presigned URL generated for movieId: ${movieId}`);
-      return url;
+      const res = await db.query('SELECT cdnpath FROM Movie WHERE imdbid = $1', [movieId])
+      if (res.rows.length === 0) {
+        throw new Error(`No movie found with ID: ${movieId}`);
+      }
+      else{
+        const url = res.rows;
+        return url
+      }
+      
     } catch (err) {
-      logger.error(`Error generating presigned URL: ${err}`);
+      logger.error(`Error Getting presigned URL: ${err}`);
       throw err;
     }
   }

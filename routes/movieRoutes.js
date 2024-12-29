@@ -112,8 +112,7 @@ router.get('/presigned-url/:id', async (req, res) => {
 
   try {
     const url = await movieModel.getPresignedUrl(id);
-    logger.info(`GET /presigned-url/${id} - Presigned URL generated successfully`);
-    res.json({ presignedUrl: url });
+   res.json({ presignedUrl: url });
   } catch (err) {
     logger.error(`GET /presigned-url/${id} - Error: ${err}`);
     res.status(500).json({ message: 'Internal server error' });
